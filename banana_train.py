@@ -8,6 +8,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import numpy as np
 import os
 import pathlib
+import pickle  # Added for saving training history
 
 # -------------------------------
 # Use absolute paths
@@ -15,19 +16,19 @@ import pathlib
 base_dir = r"D:\Banana Ripeness Classification Dataset"
 train_dir = os.path.join(base_dir, "train")
 val_dir = os.path.join(base_dir, "valid")
-test_dir = os.path.join(base_dir, "test")  # Added test directory
+test_dir = os.path.join(base_dir, "test")
 
 print(f"Training directory: {train_dir}")
 print(f"Validation directory: {val_dir}")
 print(f"Test directory: {test_dir}")
 
 # -------------------------------
-# Parameters (adjusted for quick test)
+# Parameters (for full training)
 # -------------------------------
 IMG_SIZE = (224, 224)
-BATCH_SIZE = 32    # smaller for testing
-EPOCHS_HEAD = 5     # stage 1
-EPOCHS_FINE = 5     # stage 2
+BATCH_SIZE = 32     # Good balance for training speed and memory
+EPOCHS_HEAD = 10    # Increased epochs for better initial training
+EPOCHS_FINE = 15    # Increased fine-tuning epochs for full training
 
 # -------------------------------
 # Data Generators with correct preprocessing
@@ -43,8 +44,9 @@ train_datagen = ImageDataGenerator(
 )
 
 val_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
-test_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)  # No augmentation for test data
+test_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
 
+# Use all available training data
 train_generator = train_datagen.flow_from_directory(
     train_dir,
     target_size=IMG_SIZE,
@@ -58,7 +60,7 @@ val_generator = val_datagen.flow_from_directory(
     target_size=IMG_SIZE,
     batch_size=BATCH_SIZE,
     class_mode="categorical",
-    shuffle=False  # Don't shuffle validation for confusion matrix
+    shuffle=False
 )
 
 test_generator = test_datagen.flow_from_directory(
@@ -66,7 +68,7 @@ test_generator = test_datagen.flow_from_directory(
     target_size=IMG_SIZE,
     batch_size=BATCH_SIZE,
     class_mode="categorical",
-    shuffle=False  # Don't shuffle test data for consistent evaluation
+    shuffle=False
 )
 
 # -------------------------------
@@ -78,6 +80,7 @@ class_weights = class_weight.compute_class_weight(
     y=train_generator.classes
 )
 class_weights = dict(enumerate(class_weights))
+print("Class weights:", class_weights)
 
 # -------------------------------
 # Build EfficientNetB0 model
@@ -102,6 +105,13 @@ model.compile(
     loss="categorical_crossentropy",
     metrics=["accuracy"]
 )
+
+# Create project directory for saving outputs
+project_dir = pathlib.Path(__file__).parent.absolute()
+model_dir = os.path.join(project_dir, "models")
+history_dir = os.path.join(project_dir, "history")
+os.makedirs(model_dir, exist_ok=True)
+os.makedirs(history_dir, exist_ok=True)
 
 # -------------------------------
 # Stage 1: Train classifier head
@@ -138,92 +148,103 @@ history_fine = model.fit(
 # -------------------------------
 # Save model
 # -------------------------------
-model_dir = os.path.join(base_dir, "models")
-os.makedirs(model_dir, exist_ok=True)
 model_path = os.path.join(model_dir, "banana_ripeness_efficientnet.keras")
 model.save(model_path)
+print(f"Model saved to: {model_path}")
 
 # -------------------------------
-# Evaluate on validation data
+# Save training history
 # -------------------------------
-print("\n--- Validation Set Evaluation ---\n")
-val_loss, val_acc = model.evaluate(val_generator)
-print(f"Validation Loss: {val_loss:.4f}")
-print(f"Validation Accuracy: {val_acc:.4f}")
+# Combine both training histories
+full_history = {
+    'head_training': {
+        'accuracy': history_head.history['accuracy'],
+        'loss': history_head.history['loss'],
+        'val_accuracy': history_head.history['val_accuracy'],
+        'val_loss': history_head.history['val_loss']
+    },
+    'fine_tuning': {
+        'accuracy': history_fine.history['accuracy'],
+        'loss': history_fine.history['loss'],
+        'val_accuracy': history_fine.history['val_accuracy'],
+        'val_loss': history_fine.history['val_loss']
+    }
+}
+
+# Save history as pickle file
+history_path = os.path.join(history_dir, "training_history.pkl")
+with open(history_path, 'wb') as file:
+    pickle.dump(full_history, file)
+print(f"Training history saved to: {history_path}")
+
+# Save training configuration for reference
+config = {
+    'img_size': IMG_SIZE,
+    'batch_size': BATCH_SIZE,
+    'epochs_head': EPOCHS_HEAD,
+    'epochs_fine': EPOCHS_FINE,
+    'class_weights': class_weights,
+    'model_architecture': 'EfficientNetB0',
+    'num_classes': train_generator.num_classes,
+    'class_indices': train_generator.class_indices
+}
+
+config_path = os.path.join(history_dir, "training_config.pkl")
+with open(config_path, 'wb') as file:
+    pickle.dump(config, file)
+print(f"Training configuration saved to: {config_path}")
 
 # -------------------------------
-# Calculate validation confusion matrix
+# Evaluate the model
 # -------------------------------
-print("\n--- Validation Set Confusion Matrix ---\n")
+print("\n--- Model Evaluation ---\n")
 
-# Reset the validation generator to ensure we get all samples
-val_generator.reset()
+# Evaluate on test set
+print("Evaluating on test set...")
+test_loss, test_acc = model.evaluate(test_generator, verbose=1)
+print(f"Test accuracy: {test_acc:.4f}")
+print(f"Test loss: {test_loss:.4f}")
 
 # Get predictions
-val_Y_pred = model.predict(val_generator)
-val_y_pred = np.argmax(val_Y_pred, axis=1)
+print("Generating predictions for confusion matrix...")
+test_generator.reset()
+y_pred = model.predict(test_generator, verbose=1)
+y_pred_classes = np.argmax(y_pred, axis=1)
 
 # Get true labels
-val_steps = len(val_generator)
-val_y_true = []
+y_true = test_generator.classes
 
-val_generator.reset()
-for i in range(val_steps):
-    _, y_batch = next(val_generator)
-    val_y_true.extend(np.argmax(y_batch, axis=1))
-
-# Trim to match prediction length (in case of incomplete last batch)
-val_y_true = val_y_true[:len(val_y_pred)]
+# Get class labels
+class_labels = list(test_generator.class_indices.keys())
 
 # Calculate confusion matrix
-val_cm = confusion_matrix(val_y_true, val_y_pred)
-print("\nValidation Confusion Matrix:")
-print(val_cm)
+cm = confusion_matrix(y_true, y_pred_classes)
+print("\nConfusion Matrix:")
+print(cm)
 
-# -------------------------------
-# Evaluate on test data
-# -------------------------------
-print("\n--- Test Set Evaluation ---\n")
-
-# Evaluate the model on test data
-test_loss, test_acc = model.evaluate(test_generator)
-print(f"Test Loss: {test_loss:.4f}")
-print(f"Test Accuracy: {test_acc:.4f}")
-
-# Get predictions on test data
-test_generator.reset()
-test_Y_pred = model.predict(test_generator)
-test_y_pred = np.argmax(test_Y_pred, axis=1)
-
-# Get true labels for test data
-test_steps = len(test_generator)
-test_y_true = []
-
-test_generator.reset()
-for i in range(test_steps):
-    _, y_batch = next(test_generator)
-    test_y_true.extend(np.argmax(y_batch, axis=1))
-
-# Trim to match prediction length
-test_y_true = test_y_true[:len(test_y_pred)]
-
-# Calculate test confusion matrix
-test_cm = confusion_matrix(test_y_true, test_y_pred)
-print("\nTest Confusion Matrix:")
-print(test_cm)
-
-# Get class names for better interpretation
-class_names = list(train_generator.class_indices.keys())
-print("\nClass Indices:", train_generator.class_indices)
-
-# Generate classification report for test data
-test_report = classification_report(
-    test_y_true, 
-    test_y_pred,
-    target_names=class_names,
+# Generate classification report
+report = classification_report(
+    y_true, 
+    y_pred_classes,
+    target_names=class_labels,
     digits=4
 )
-print("\nTest Classification Report:")
-print(test_report)
+print("\nClassification Report:")
+print(report)
 
-print("\n✅ Training finished. Model saved at:", model_path)
+# Save evaluation results
+evaluation_results = {
+    'test_accuracy': test_acc,
+    'test_loss': test_loss,
+    'confusion_matrix': cm,
+    'classification_report': report,
+    'y_true': y_true,
+    'y_pred_classes': y_pred_classes
+}
+
+eval_path = os.path.join(history_dir, "evaluation_results.pkl")
+with open(eval_path, 'wb') as file:
+    pickle.dump(evaluation_results, file)
+print(f"Evaluation results saved to: {eval_path}")
+
+print("\n✅ Training completed successfully.")
