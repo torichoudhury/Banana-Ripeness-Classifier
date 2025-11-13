@@ -7,7 +7,7 @@ import os
 import sys
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
-from banana_ripeness_classifier import predict_image
+from banana_ripeness_classifier_ENB0 import predict_image
 
 def main():
     # Check if model exists
