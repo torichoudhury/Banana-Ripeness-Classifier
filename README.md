@@ -59,6 +59,7 @@ pip install -r requirements.txt
 ### 3. Add Your Model Files
 
 Place your three trained model files in the `models/` directory:
+
 - `banana_ripeness_efficientnet_pytorch.pth`
 - `banana_ripeness_resnet_pytorch.pth`
 - `banana_ripeness_mobilenet_pytorch.pth`
@@ -98,16 +99,19 @@ Open your browser and navigate to `http://localhost:3000`
 ## Model Information
 
 ### EfficientNet-B0
+
 - Efficient architecture with compound scaling
 - Balanced accuracy and computational efficiency
 - Icon: ⚡
 
 ### ResNet50
+
 - Deep residual network with skip connections
 - Strong feature extraction capabilities
 - Icon: 🎯
 
 ### MobileNetV2
+
 - Lightweight model optimized for mobile devices
 - Fast inference with minimal resource usage
 - Icon: 📱
@@ -115,19 +119,24 @@ Open your browser and navigate to `http://localhost:3000`
 ## API Endpoints
 
 ### GET `/`
+
 Returns API information and available models
 
 ### GET `/models`
+
 Returns list of loaded models with their class names
 
 ### POST `/predict`
+
 Accepts an image file and returns predictions from all models
 
 **Request:**
+
 - Content-Type: `multipart/form-data`
 - Body: `file` (image file)
 
 **Response:**
+
 ```json
 {
   "success": true,
@@ -149,6 +158,7 @@ Accepts an image file and returns predictions from all models
 ## Building for Production
 
 ### Frontend
+
 ```bash
 npm run build
 ```
@@ -156,6 +166,7 @@ npm run build
 The production build will be in the `dist/` directory.
 
 ### Backend
+
 For production deployment, use a production ASGI server:
 
 ```bash
@@ -166,15 +177,18 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.app:app
 ## Troubleshooting
 
 ### Models Not Loading
+
 - Ensure model files are in the `models/` directory
 - Check that file names match exactly
 - Verify PyTorch version compatibility
 
 ### CORS Issues
+
 - The backend is configured to allow all origins in development
 - For production, update the CORS settings in `backend/app.py`
 
 ### Port Conflicts
+
 - Backend default port: 8000
 - Frontend default port: 3000
 - Change ports in `vite.config.js` and `backend/app.py` if needed
@@ -184,11 +198,3 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.app:app
 - **Frontend**: React, Vite, Axios
 - **Backend**: FastAPI, PyTorch, Torchvision
 - **Models**: EfficientNet-B0, ResNet50, MobileNetV2
-
-## License
-
-MIT
-
-## Author
-
-Banana Ripeness Classification Project
