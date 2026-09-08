@@ -102,19 +102,16 @@ Open your browser and navigate to `http://localhost:3000`
 
 - Efficient architecture with compound scaling
 - Balanced accuracy and computational efficiency
-- Icon: ⚡
 
 ### ResNet50
 
 - Deep residual network with skip connections
 - Strong feature extraction capabilities
-- Icon: 🎯
 
 ### MobileNetV2
 
 - Lightweight model optimized for mobile devices
 - Fast inference with minimal resource usage
-- Icon: 📱
 
 ## API Endpoints
 
